@@ -55,3 +55,42 @@ export function binValues(values, min, max, integerOnly) {
   }
   return bins;
 }
+
+// ---- Rating and ranking polls --------------------------------------------
+// Items are 0, 1, 2 and shown to the instructor as A, B, C.
+// An order is a string of letters, best first: "BAC" means B > A > C.
+
+export const LETTERS = ['A', 'B', 'C'];
+export const PAIRS = [[0, 1], [0, 2], [1, 2]];
+export const ORDERS = ['ABC', 'ACB', 'BAC', 'BCA', 'CAB', 'CBA'];
+export const CYCLE = 'cycle';
+
+export function orderLabel(key) {
+  return key === CYCLE ? 'No order (cycle)' : key.split('').join(' > ');
+}
+
+// The order one student's answer implies, or CYCLE for an intransitive ranking.
+export function orderOf(kind, answer) {
+  if (kind === 'rating') {
+    const r = answer.ratings;
+    return [0, 1, 2].sort((a, b) => r[b] - r[a]).map(i => LETTERS[i]).join('');
+  }
+  const wins = [0, 0, 0];
+  for (const w of answer.winners) wins[w] += 1;
+  if ([...wins].sort().join('') !== '012') return CYCLE;  // each item won once
+  return [0, 1, 2].sort((a, b) => wins[b] - wins[a]).map(i => LETTERS[i]).join('');
+}
+
+// Counts every order. `share` is out of all answers, so cycles count as disagreeing.
+export function summarizeOrders(kind, answers) {
+  const n = answers.length;
+  const keys = kind === 'ranking' ? [...ORDERS, CYCLE] : ORDERS;
+  const counts = Object.fromEntries(keys.map(k => [k, 0]));
+  for (const a of answers) counts[orderOf(kind, a)] += 1;
+  const best = Math.max(0, ...ORDERS.map(k => counts[k]));
+  const top = best > 0 ? ORDERS.filter(k => counts[k] === best) : [];
+  const perItem = kind === 'rating'
+    ? [0, 1, 2].map(i => n ? answers.reduce((s, a) => s + a.ratings[i], 0) / n : null)   // mean rating
+    : [0, 1, 2].map(i => answers.reduce((s, a) => s + a.winners.filter(w => w === i).length, 0)); // pair wins
+  return { kind, n, keys, counts, top, topShare: n ? best / n : null, cycles: counts[CYCLE] ?? 0, perItem };
+}

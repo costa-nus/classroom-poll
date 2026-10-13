@@ -34,8 +34,25 @@
     <p id="status" class="status" role="status"></p>
   </form>
 
+  <section id="steps" hidden>
+    <small class="kicker" id="step-count"></small>
+    <h1 id="step-prompt"></h1>
+    <div id="step-body"></div>
+    <div class="row step-nav">
+      <button id="step-back" type="button">Back</button>
+      <button class="primary" id="step-next" type="button">Next</button>
+    </div>
+    <p id="step-status" class="status" role="status"></p>
+  </section>
+
+  <section id="done" hidden>
+    <h1>Your answers are submitted</h1>
+    <p>You can change them while the poll is open.</p>
+    <p><button id="redo" type="button">Change my answers</button></p>
+  </section>
+
   <footer>
-    Answers are anonymous: only the number is stored. You can change your answer while the poll is open.
+    Answers are anonymous: only your answers are stored, with no name. You can change them while the poll is open.
     <br><a href="#" id="change-key">Change key</a>
   </footer>
 </main>

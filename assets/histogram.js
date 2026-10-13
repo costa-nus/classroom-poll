@@ -48,3 +48,31 @@ export function histogramSvg(bins, integerOnly, unit, marks = {}) {
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+// Horizontal bars of order shares. `series`: [{ name, cls, summary }], one or two.
+export function orderChartSvg(keys, series, labelOf) {
+  const rowH = series.length > 1 ? 44 : 34, W = 800, L = 150, R = 70, T = series.length > 1 ? 30 : 6;
+  const H = T + keys.length * rowH + 6, pw = W - L - R;
+  const parts = [`<svg class="hist orders" viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of each order">`];
+  if (series.length > 1) {
+    series.forEach((s, j) => {
+      parts.push(`<rect class="${s.cls}" x="${L + j * 170}" y="6" width="14" height="14"/>`);
+      parts.push(`<text x="${L + j * 170 + 20}" y="18">${escapeHtml(s.name)}</text>`);
+    });
+  }
+  keys.forEach((k, i) => {
+    const y0 = T + i * rowH, barH = (rowH - 10) / series.length;
+    parts.push(`<text x="${L - 10}" y="${y0 + (rowH - 4) / 2 + 5}" text-anchor="end">${escapeHtml(labelOf(k))}</text>`);
+    series.forEach((s, j) => {
+      const { n, counts } = s.summary;
+      const share = n ? (counts[k] ?? 0) / n : 0;
+      const by = y0 + j * barH, w = Math.max(share > 0 ? 2 : 0, share * pw);
+      parts.push(`<rect class="${s.cls}" x="${L}" y="${by}" width="${w}" height="${barH - 2}"><title>${counts[k] ?? 0} of ${n}</title></rect>`);
+      if (counts[k] !== undefined) {
+        parts.push(`<text x="${L + w + 6}" y="${by + barH / 2 + 4}">${Math.round(share * 100)}%</text>`);
+      }
+    });
+  });
+  parts.push('</svg>');
+  return parts.join('');
+}

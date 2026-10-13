@@ -72,8 +72,28 @@ footer { margin-top: 36px; color: var(--muted); font-size: 14px; }
 #present .join .key { font-size: 34px; font-weight: 700; letter-spacing: .12em; color: var(--head); }
 #present .answer-count { font-size: 46px; font-weight: 700; color: var(--head); }
 #present svg.hist text { font-size: 20px; }
+#present.compare { grid-template-columns: 1fr; }
 #present .controls { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 700px) {
   #present { grid-template-columns: 1fr; overflow-y: auto; }
   h1 { font-size: 25px; }
+}
+/* Rating and ranking polls */
+.item-card { background: var(--panel); border: 2px solid var(--line); border-radius: 4px; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 18px; text-align: left; width: 100%; color: var(--ink); }
+.scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 6px; margin: 18px 0 6px; }
+.scale button { padding: 14px 0; font-size: 20px; font-weight: 600; }
+.scale button[aria-pressed=true], .pair button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-bg); }
+.scale-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.pair button { cursor: pointer; }
+.step-nav { justify-content: space-between; margin-top: 22px; }
+.legend { margin: 10px 0; padding: 0; list-style: none; }
+.legend li { margin: 4px 0; overflow-wrap: anywhere; }
+.legend b { display: inline-block; min-width: 1.6em; }
+svg.hist .rating-bar { fill: var(--bar); }
+svg.hist .ranking-bar { fill: var(--accent); }
+.verdict { font-size: 20px; font-weight: 700; color: var(--head); margin: 14px 0; }
+@media (max-width: 600px) {
+  .scale { grid-template-columns: repeat(6, 1fr); }
+  .pair { grid-template-columns: 1fr; }
 }

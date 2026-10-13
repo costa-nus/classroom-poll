@@ -1,4 +1,4 @@
--- Class poll — Supabase schema (migration "classroom_poll_init", applied 13 Oct 2026).
+-- Class poll — Supabase schema, part 1 (migration "classroom_poll_init", applied 13 Oct 2026).
 -- Keys are not here. After applying, insert the two bcrypt hashes:
 --   insert into private.app_keys (role, key_hash) values
 --     ('student',    extensions.crypt('<student key>',    extensions.gen_salt('bf', 8))),

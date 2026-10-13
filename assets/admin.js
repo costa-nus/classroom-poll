@@ -1,14 +1,20 @@
 import { rpc, store, fmt, KeyError } from './api.js';
-import { summarize, binValues } from './stats.js';
-import { histogramSvg, escapeHtml } from './histogram.js';
+import { summarize, binValues, summarizeOrders, orderLabel, LETTERS, ORDERS, CYCLE } from './stats.js';
+import { histogramSvg, orderChartSvg, escapeHtml } from './histogram.js';
 
 const $ = s => document.querySelector(s);
 let adminKey = store.get('cp.admin');
+let polls = [];             // last poll_list
 let selected = null;        // id of the poll shown in the results view
-let latest = null;          // last poll_results payload
+let latest = null;          // last poll_results payload for it
+let comparing = null;       // { rating, ranking } poll results shown in the comparison
+let presentMode = null;     // 'poll' | 'compare' while full screen
 let showDistribution = false; // present mode starts with the count only
 
 const studentUrl = new URL('./', location.href).href;
+const KIND_NAMES = { number: 'Number', rating: 'Rating', ranking: 'Ranking' };
+const pct = x => (x === null || x === undefined ? '–' : `${Math.round(x * 100)}%`);
+const short = (s, n = 140) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 function setStatus(el, text, cls = '') { el.textContent = text; el.className = `status ${cls}`; }
 
@@ -23,14 +29,20 @@ async function call(fn, args) {
   catch (e) { if (e instanceof KeyError) signOut('That instructor key is not right.'); throw e; }
 }
 
+function kindText(p) {
+  if (p.kind === 'rating') return 'Rating 0–10';
+  if (p.kind === 'ranking') return 'Ranking, 3 pairs';
+  return `Number ${fmt(p.min_value)}–${fmt(p.max_value)} ${escapeHtml(p.unit)}${p.integer_only ? '' : ' (decimals)'}`;
+}
+
 // ---- list ---------------------------------------------------------------
 async function loadList() {
-  const polls = await call('poll_list', {});
+  polls = await call('poll_list', {});
   $('#list-empty').hidden = polls.length > 0;
   $('#list').innerHTML = polls.map(p => `
     <tr>
       <td>${escapeHtml(p.question)}</td>
-      <td>${fmt(p.min_value)}–${fmt(p.max_value)} ${escapeHtml(p.unit)}${p.integer_only ? '' : ' (decimals)'}</td>
+      <td>${kindText(p)}</td>
       <td>${p.responses}</td>
       <td><span class="badge ${p.is_open ? 'open' : ''}">${p.is_open ? 'Open' : 'Closed'}</span></td>
       <td class="actions">
@@ -39,6 +51,7 @@ async function loadList() {
         <button class="small danger" data-act="delete" data-id="${p.id}">Delete</button>
       </td>
     </tr>`).join('');
+  fillCompareSelects();
 }
 
 $('#list').addEventListener('click', async e => {
@@ -57,20 +70,50 @@ $('#list').addEventListener('click', async e => {
 });
 
 // ---- create -------------------------------------------------------------
+function updateCreateForm() {
+  const kind = $('#c-kind').value, choice = kind !== 'number';
+  $('#c-number-fields').hidden = choice;
+  $('#c-choice-fields').hidden = !choice;
+  $('#c-question-label').textContent = choice ? 'Question shown above the items' : 'Question';
+  $('#c-question').placeholder = choice
+    ? 'Which answer explains self-attention best?'
+    : 'How much GPU memory does a 7B model need for full training?';
+  $('#c-both-label').textContent = kind === 'rating'
+    ? 'Also create a ranking poll with the same question and items (closed)'
+    : 'Also create a rating poll with the same question and items (closed)';
+}
+$('#c-kind').onchange = updateCreateForm;
+
 $('#create').addEventListener('submit', async e => {
   e.preventDefault();
   const open = e.submitter?.dataset.open === '1';
-  const min = Number($('#c-min').value), max = Number($('#c-max').value);
-  const st = $('#create-status');
-  if (!(min < max)) return setStatus(st, 'The lowest value must be below the highest.', 'error');
+  const kind = $('#c-kind').value, st = $('#create-status');
+  const question = $('#c-question').value;
+  let args;
+  if (kind === 'number') {
+    const min = Number($('#c-min').value), max = Number($('#c-max').value);
+    if ($('#c-min').value === '' || $('#c-max').value === '' || !(min < max)) {
+      return setStatus(st, 'Set a lowest value below the highest value.', 'error');
+    }
+    args = { p_question: question, p_unit: $('#c-unit').value, p_min: min, p_max: max,
+             p_integer_only: $('#c-integer').checked, p_kind: 'number', p_items: null };
+  } else {
+    const items = [0, 1, 2].map(i => $(`#c-item-${i}`).value.trim());
+    if (items.some(t => !t)) return setStatus(st, 'Fill in all three items.', 'error');
+    args = { p_question: question, p_unit: '', p_min: 0, p_max: 10, p_integer_only: true, p_kind: kind, p_items: items };
+  }
   try {
-    const { id } = await call('poll_create', {
-      p_question: $('#c-question').value, p_unit: $('#c-unit').value,
-      p_min: min, p_max: max, p_integer_only: $('#c-integer').checked,
-    });
+    const { id } = await call('poll_create', args);
+    let made = `${KIND_NAMES[kind]} poll created`;
+    if (kind !== 'number' && $('#c-both').checked) {
+      const other = kind === 'rating' ? 'ranking' : 'rating';
+      await call('poll_create', { ...args, p_kind: other });
+      made += ` with a closed ${other} poll on the same items`;
+    }
     if (open) await call('poll_set_open', { p_poll: id, p_open: true });
     $('#c-question').value = '';
-    setStatus(st, open ? 'Created and opened. Opening a poll closes any other open poll.' : 'Created.', 'ok');
+    for (const i of [0, 1, 2]) $(`#c-item-${i}`).value = '';
+    setStatus(st, `${made}${open ? ' and opened. Opening a poll closes any other open poll.' : '.'}`, 'ok');
     await loadList();
     if (open) view(id);
   } catch (err) { setStatus(st, err.message, 'error'); }
@@ -78,6 +121,7 @@ $('#create').addEventListener('submit', async e => {
 
 // ---- results view -------------------------------------------------------
 async function view(id) {
+  closeCompare();
   selected = id; $('#results').hidden = false;
   await refreshResults();
   $('#results').scrollIntoView({ behavior: 'smooth' });
@@ -91,35 +135,67 @@ async function refreshResults() {
   render();
 }
 
-function render() {
-  const p = latest, s = summarize(p.values);
-  const unit = p.unit ? ` ${p.unit}` : '';
-  $('#r-question').textContent = p.question;
-  $('#r-meta').textContent = `${p.is_open ? 'Open' : 'Closed'} · range ${fmt(p.min_value)}–${fmt(p.max_value)}${unit} · ${p.integer_only ? 'whole numbers' : 'decimals allowed'}`;
-  $('#r-toggle').textContent = p.is_open ? 'Close poll' : 'Open poll';
-  const cells = s.n ? [['Answers', s.n], ['Mean', fmt(s.mean)], ['Median', fmt(s.median)], ['SD', fmt(s.sd)],
-    ['Min', fmt(s.min)], ['Q1', fmt(s.q1)], ['Q3', fmt(s.q3)], ['Max', fmt(s.max)]] : [['Answers', 0]];
-  $('#r-stats').innerHTML = cells.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
-  const hist = histogram(s);
-  $('#r-hist').innerHTML = hist;
-
-  // Present mode
-  $('#p-question').textContent = p.question;
-  $('#p-count').textContent = `${s.n} ${s.n === 1 ? 'answer' : 'answers'}`;
-  $('#p-hist').innerHTML = showDistribution ? hist : '';
-  $('#p-toggle').textContent = p.is_open ? 'Close poll' : 'Open poll';
-  $('#p-show').textContent = showDistribution ? 'Hide distribution' : 'Show distribution';
+function legendHtml(p, summary) {
+  return p.items.map((text, i) => {
+    let extra = '';
+    if (summary?.n) {
+      extra = p.kind === 'rating'
+        ? ` <span class="note">— mean rating ${summary.perItem[i].toFixed(1)}</span>`
+        : ` <span class="note">— won ${summary.perItem[i]} of ${2 * summary.n} pairs</span>`;
+    }
+    return `<li><b>${LETTERS[i]}</b> ${escapeHtml(short(text))}${extra}</li>`;
+  }).join('');
 }
 
-function histogram(s) {
+function topText(s) {
+  return s.top.length ? s.top.map(orderLabel).join(' / ') : '–';
+}
+
+function render() {
   const p = latest;
-  const values = p.values.map(Number);
-  const bins = binValues(values, Number(p.min_value), Number(p.max_value), p.integer_only);
-  const answerText = $('#r-answer').value;
-  return histogramSvg(bins, p.integer_only, p.unit, {
-    mean: $('#r-mean').checked && s.n ? s.mean : undefined,
-    answer: answerText === '' ? undefined : Number(answerText),
-  });
+  $('#r-question').textContent = p.question;
+  $('#r-toggle').textContent = p.is_open ? 'Close poll' : 'Open poll';
+  $('#p-toggle').textContent = p.is_open ? 'Close poll' : 'Open poll';
+  $('#p-show').textContent = showDistribution ? 'Hide results' : 'Show results';
+  $('#p-question').textContent = p.question;
+  let chart, presentChart, n;
+
+  if (p.kind === 'number') {
+    const s = summarize(p.values); n = s.n;
+    const unit = p.unit ? ` ${p.unit}` : '';
+    $('#r-meta').textContent = `Number · ${p.is_open ? 'open' : 'closed'} · range ${fmt(p.min_value)}–${fmt(p.max_value)}${unit} · ${p.integer_only ? 'whole numbers' : 'decimals allowed'}`;
+    const cells = s.n ? [['Answers', s.n], ['Mean', fmt(s.mean)], ['Median', fmt(s.median)], ['SD', fmt(s.sd)],
+      ['Min', fmt(s.min)], ['Q1', fmt(s.q1)], ['Q3', fmt(s.q3)], ['Max', fmt(s.max)]] : [['Answers', 0]];
+    $('#r-stats').innerHTML = cells.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
+    $('#r-legend').innerHTML = '';
+    $('#r-number-controls').hidden = false;
+    const bins = binValues(p.values.map(Number), Number(p.min_value), Number(p.max_value), p.integer_only);
+    const answerText = $('#r-answer').value;
+    chart = histogramSvg(bins, p.integer_only, p.unit, {
+      mean: $('#r-mean').checked && s.n ? s.mean : undefined,
+      answer: answerText === '' ? undefined : Number(answerText),
+    });
+    presentChart = chart;
+  } else {
+    const s = summarizeOrders(p.kind, p.answers); n = s.n;
+    $('#r-meta').textContent = `${KIND_NAMES[p.kind]} · ${p.is_open ? 'open' : 'closed'} · ${p.kind === 'rating'
+      ? 'each student rates A, B, C from 0 to 10 (all different)'
+      : 'each student picks the better item in A–B, A–C, B–C'}`;
+    const cells = [['Answers', s.n], ['Most popular order', topText(s)], ['Agree on it', pct(s.topShare)]];
+    if (p.kind === 'ranking') cells.push(['No order (cycle)', s.n ? `${s.cycles} (${pct(s.cycles / s.n)})` : '0']);
+    $('#r-stats').innerHTML = cells.map(([k, v]) => `<div><b>${escapeHtml(String(v))}</b><span>${k}</span></div>`).join('');
+    $('#r-legend').innerHTML = legendHtml(p, s);
+    $('#r-number-controls').hidden = true;
+    const cls = p.kind === 'rating' ? 'rating-bar' : 'ranking-bar';
+    chart = orderChartSvg(s.keys, [{ name: KIND_NAMES[p.kind], cls, summary: s }], orderLabel);
+    presentChart = `<p class="verdict">Most popular: ${escapeHtml(topText(s))} · ${pct(s.topShare)} agree</p>
+      <ul class="legend">${legendHtml(p, null)}</ul>${chart}`;
+  }
+  $('#r-chart').innerHTML = chart;
+  if (presentMode === 'poll') {
+    $('#p-count').textContent = `${n} ${n === 1 ? 'answer' : 'answers'}`;
+    $('#p-chart').innerHTML = showDistribution ? presentChart : '';
+  }
 }
 
 async function toggleOpen() {
@@ -132,25 +208,124 @@ $('#r-close-view').onclick = closeView;
 $('#r-answer').oninput = () => latest && render();
 $('#r-mean').onchange = () => latest && render();
 
+// ---- rating vs ranking comparison ---------------------------------------
+const sameItems = (a, b) => JSON.stringify(a.items) === JSON.stringify(b.items);
+
+function fillCompareSelects() {
+  const ratings = polls.filter(p => p.kind === 'rating'), rankings = polls.filter(p => p.kind === 'ranking');
+  const fill = (sel, list) => {
+    const html = list.map(p => `<option value="${p.id}">${escapeHtml(short(p.question, 70))} (${p.responses})</option>`).join('');
+    if (sel.dataset.html === html) return;  // unchanged: do not close an open dropdown
+    const keep = sel.value;
+    sel.innerHTML = html; sel.dataset.html = html;
+    if (list.some(p => p.id === keep)) sel.value = keep;
+  };
+  const keptRanking = $('#cmp-ranking').value;
+  fill($('#cmp-rating'), ratings);
+  fill($('#cmp-ranking'), rankings);
+  if (!rankings.some(p => p.id === keptRanking)) matchRanking();
+  $('#cmp-show').disabled = !ratings.length || !rankings.length;
+  $('#cmp-pick-note').textContent = ratings.length && rankings.length
+    ? 'Each list shows the question and its number of answers, newest first.'
+    : 'Create a rating poll and a ranking poll first (tick "Also create…" to make both at once).';
+}
+
+// Pick the newest ranking poll with the same items as the chosen rating poll.
+function matchRanking() {
+  const rating = polls.find(p => p.id === $('#cmp-rating').value);
+  const match = rating && polls.find(p => p.kind === 'ranking' && sameItems(p, rating));
+  if (match) $('#cmp-ranking').value = match.id;
+}
+$('#cmp-rating').onchange = matchRanking;
+
+$('#cmp-show').onclick = async () => {
+  closeView();
+  comparing = { ratingId: $('#cmp-rating').value, rankingId: $('#cmp-ranking').value };
+  $('#compare').hidden = false;
+  await refreshCompare();
+  $('#compare').scrollIntoView({ behavior: 'smooth' });
+};
+function closeCompare() { comparing = null; $('#compare').hidden = true; }
+$('#cmp-close').onclick = closeCompare;
+
+async function refreshCompare() {
+  if (!comparing) return;
+  const [rating, ranking] = await Promise.all([
+    call('poll_results', { p_poll: comparing.ratingId }),
+    call('poll_results', { p_poll: comparing.rankingId }),
+  ]);
+  if (!rating || !ranking) return closeCompare();
+  const html = compareHtml(rating, ranking);
+  $('#cmp-body').innerHTML = html;
+  $('#cmp-note').textContent = [rating, ranking].some(p => p.is_open)
+    ? 'A poll is still open; the numbers update as answers arrive.' : 'Both polls are closed.';
+  if (presentMode === 'compare') $('#p-chart').innerHTML = html;
+}
+
+function compareHtml(rating, ranking) {
+  const a = summarizeOrders('rating', rating.answers), b = summarizeOrders('ranking', ranking.answers);
+  const same = a.top.length && b.top.length && a.top.join() === b.top.join();
+  const overlap = a.top.filter(k => b.top.includes(k));
+  let verdict;
+  if (!a.n || !b.n) verdict = 'Waiting for answers in both polls.';
+  else if (same) verdict = `Both polls agree: the most popular order is ${a.top.map(orderLabel).join(' / ')}.`;
+  else if (overlap.length) verdict = `The polls share ${overlap.map(orderLabel).join(' / ')} among their most popular orders.`;
+  else verdict = `The polls disagree: rating puts ${topText(a)} first, ranking puts ${topText(b)} first.`;
+
+  const diff = a.n && b.n ? Math.round((b.topShare - a.topShare) * 100) : null;
+  const row = (label, x, y) => `<tr><th>${label}</th><td>${x}</td><td>${y}</td></tr>`;
+  const table = `<div class="table-wrap"><table>
+    <thead><tr><th></th><th>Rating poll</th><th>Ranking poll</th></tr></thead>
+    <tbody>
+      ${row('Answers', a.n, b.n)}
+      ${row('Most popular order', escapeHtml(topText(a)), escapeHtml(topText(b)))}
+      ${row('Agree on it', pct(a.topShare), pct(b.topShare))}
+      ${row('No order (cycle)', '— (ties not allowed)', b.n ? `${b.cycles} (${pct(b.cycles / b.n)})` : '0')}
+    </tbody></table></div>`;
+  const itemsNote = sameItems(rating, ranking) ? ''
+    : '<p class="status error">These two polls do not have the same three items, so the letters do not mean the same thing.</p>';
+  const chart = orderChartSvg([...ORDERS, CYCLE], [
+    { name: 'Rating poll', cls: 'rating-bar', summary: a },
+    { name: 'Ranking poll', cls: 'ranking-bar', summary: b },
+  ], orderLabel);
+  return `<p class="verdict">${escapeHtml(verdict)}${diff === null ? ''
+      : ` Agreement: rating ${pct(a.topShare)}, ranking ${pct(b.topShare)} (${diff >= 0 ? '+' : ''}${diff} points for ranking).`}</p>
+    ${itemsNote}<ul class="legend">${legendHtml(rating, null)}</ul>${table}${chart}`;
+}
+
 // ---- present mode -------------------------------------------------------
 function studentLink() {
   const k = store.get('cp.studentKey');
   return k ? `${studentUrl}#k=${encodeURIComponent(k)}` : studentUrl;
 }
-function present() {
-  const qr = qrcode(0, 'M'); qr.addData(studentLink()); qr.make();
-  $('#p-qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
-  $('#p-url').textContent = studentUrl.replace(/^https?:\/\//, '');
-  $('#p-key').textContent = store.get('cp.studentKey') || '';
-  showDistribution = false; render();
+function enterPresent(mode) {
+  presentMode = mode;
+  const compare = mode === 'compare';
+  $('#present').classList.toggle('compare', compare);
+  $('#p-join').hidden = compare;
+  $('#p-toggle').hidden = compare;
+  $('#p-show').hidden = compare;
+  $('#p-count').hidden = compare;
+  if (compare) {
+    $('#p-question').textContent = 'Rating vs ranking';
+    $('#p-chart').innerHTML = $('#cmp-body').innerHTML;
+  } else {
+    const qr = qrcode(0, 'M'); qr.addData(studentLink()); qr.make();
+    $('#p-qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
+    $('#p-url').textContent = studentUrl.replace(/^https?:\/\//, '');
+    $('#p-key').textContent = store.get('cp.studentKey') || '';
+    showDistribution = false; render();
+  }
   $('#present').hidden = false;
   document.documentElement.requestFullscreen?.().catch(() => {});
 }
 function exitPresent() {
+  presentMode = null;
   $('#present').hidden = true;
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
-$('#r-present').onclick = present;
+$('#r-present').onclick = () => enterPresent('poll');
+$('#cmp-present').onclick = () => enterPresent('compare');
 $('#p-exit').onclick = exitPresent;
 $('#p-show').onclick = () => { showDistribution = !showDistribution; render(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#present').hidden) exitPresent(); });
@@ -200,6 +375,7 @@ async function start() {
   showStudentLink();
 }
 
+updateCreateForm();
 if (adminKey) {
   start().catch(e => { if (!(e instanceof KeyError)) { $('#login').hidden = false; setStatus($('#login-status'), e.message, 'error'); } });
 } else $('#login').hidden = false;
@@ -208,5 +384,6 @@ if (adminKey) {
 setInterval(() => {
   if (!adminKey || document.hidden) return;
   if (selected) refreshResults().catch(() => {});
-  if (!$('#list-section').hidden && $('#present').hidden) loadList().catch(() => {});
+  if (comparing) refreshCompare().catch(() => {});
+  if ($('#present').hidden) loadList().catch(() => {});
 }, 2000);

@@ -1,7 +1,12 @@
 # Class poll
 
-A small number poll for lectures. Students type a number on their phone; the
-instructor sees the distribution live. Static site on GitHub Pages, data in
+A small poll for lectures, with three poll types:
+
+- **Number** — students type a number; the instructor sees the distribution.
+- **Rating** — students rate three items from 0 to 10, one at a time.
+- **Ranking** — students pick the better item in each of three pairs.
+
+Rating and ranking polls on the same three items can be compared. Static site on GitHub Pages, data in
 Supabase.
 
 - Students: <https://costa-nus.github.io/classroom-poll/>
@@ -23,10 +28,37 @@ Supabase.
 Students scan the QR code (the key is in the link) or open the student page and
 type the key. Each browser has one answer per poll; submitting again replaces it.
 
+## Rating vs ranking
+
+1. **New poll** → type **Rating**. Write the question and the three items A, B,
+   C. Keep **Also create a ranking poll…** ticked: this makes the matching
+   ranking poll (closed) at the same time. Click **Create and open**.
+2. Students see the three items one at a time, in a random order per student,
+   and rate each from 0 to 10. The three ratings must all differ (a rating used
+   for one item is greyed out for the others), so every student gives a strict
+   order.
+3. Close the rating poll. Open the ranking poll from the list.
+4. Students see the pairs A–B, A–C, B–C in a random order per student, each
+   with random left/right sides, and pick the better item in each pair.
+5. Close it. Under **Compare a rating poll with a ranking poll**, pick the two
+   polls (the ranking poll with the same items is picked for you) and click
+   **Compare**, then **Present full screen**.
+
+Each student's answers give one order of A, B, C, best first. A rating gives it
+by sorting the three ratings. A ranking gives it by counting pair wins (2, 1, 0);
+when each item wins once (A > B, B > C, C > A) there is no order, and the answer
+counts as a **cycle**. Per poll the page shows the most popular order and the
+share of students who gave exactly that order. The share is out of everyone who
+answered, so cycles count as not agreeing. The comparison shows both shares, the
+most popular order of each poll, whether they match, and the share of every
+order side by side.
+
 ## What is stored
 
-Per poll: the question, the range, the unit, open or closed. Per answer: the
-number, a random browser ID and a timestamp. No names, no accounts, no IP
+Per poll: the type, the question, the range and unit (number polls) or the
+three items (rating and ranking polls), open or closed. Per answer: the number,
+or the three ratings or pair choices with the order they were shown in, plus a
+random browser ID and a timestamp. No names, no accounts, no IP
 addresses in the tables. **Delete** on the instructor page removes a poll and
 all its answers.
 
@@ -38,15 +70,16 @@ protect the data; the database does.
 - The tables are in a `private` schema that the Supabase Data API does not
   expose. Row level security is on with no policies, and all table grants to
   `anon` and `authenticated` are revoked.
-- A browser can only call nine `SECURITY DEFINER` functions
-  (`supabase/schema.sql`). Each one checks the key it is given against a
+- A browser can only call ten `SECURITY DEFINER` functions
+  (`supabase/001_init.sql`, `supabase/002_rating_ranking.sql`). Each one checks the key it is given against a
   bcrypt hash before it does anything. The student key can read the open
   poll and submit; only the instructor key can create, open, close, delete,
   read results or change keys.
 - Only the hashes are stored. The keys are not in this repository.
 - The key in the QR link is in the URL fragment (`#k=…`), which browsers do not
   send to GitHub or Supabase. The student page removes it from the address bar.
-- Answers must be inside the poll's range, and a poll takes at most 1,000
+- Answers must be inside the poll's range (ratings: whole numbers 0–10, all
+  different; ranking: one item of each pair), and a poll takes at most 1,000
   answers.
 
 The Supabase security advisor reports these functions as "callable without
@@ -71,12 +104,12 @@ index.html          student page
 admin.html          instructor page
 assets/config.js    Supabase URL and publishable key
 assets/api.js       RPC calls, storage, number formatting
-assets/stats.js     summary statistics and histogram bins
-assets/histogram.js SVG histogram
+assets/stats.js     summary statistics, histogram bins, orders from ratings and rankings
+assets/histogram.js SVG histogram and order-share chart
 assets/student.js   student page logic
 assets/admin.js     instructor page logic
 assets/style.css    styles, light and dark
-supabase/schema.sql database schema and functions (no keys)
+supabase/*.sql      database schema and functions, in order (no keys)
 ```
 
 No build step. To run locally: `python3 -m http.server 8770`, then open

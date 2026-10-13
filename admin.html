@@ -36,30 +36,69 @@
         <button id="r-close-view" type="button">Back to list</button>
       </div>
       <div class="stats" id="r-stats"></div>
-      <div id="r-hist"></div>
-      <div class="row">
+      <ul class="legend" id="r-legend"></ul>
+      <div id="r-chart"></div>
+      <div class="row" id="r-number-controls">
         <div><label for="r-answer">Mark the correct answer (optional)</label><input id="r-answer" type="number" step="any"></div>
         <div><label for="r-mean" style="font-weight:400"><input id="r-mean" type="checkbox" checked>Show mean line</label></div>
       </div>
     </section>
 
+    <section id="compare" hidden>
+      <h2>Rating vs ranking</h2>
+      <p class="note" id="cmp-note"></p>
+      <div class="row">
+        <button class="primary" id="cmp-present" type="button">Present full screen</button>
+        <button id="cmp-close" type="button">Back to list</button>
+      </div>
+      <div id="cmp-body"></div>
+    </section>
+
     <section id="list-section">
       <div class="table-wrap"><table>
-        <thead><tr><th>Question</th><th>Range</th><th>Answers</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Question</th><th>Type</th><th>Answers</th><th>Status</th><th></th></tr></thead>
         <tbody id="list"></tbody>
       </table></div>
       <p id="list-empty" class="note" hidden>No polls yet. Create one below.</p>
 
+      <h2>Compare a rating poll with a ranking poll</h2>
+      <div class="panel">
+        <div class="row">
+          <div><label for="cmp-rating">Rating poll</label><select id="cmp-rating"></select></div>
+          <div><label for="cmp-ranking">Ranking poll</label><select id="cmp-ranking"></select></div>
+          <button class="primary" id="cmp-show" type="button">Compare</button>
+        </div>
+        <p class="note" id="cmp-pick-note"></p>
+      </div>
+
       <h2>New poll</h2>
       <form id="create" class="panel">
-        <label for="c-question">Question</label>
-        <textarea id="c-question" required maxlength="500" placeholder="How much GPU memory does a 7B model need for full training?"></textarea>
-        <div class="row">
-          <div><label for="c-min">Lowest allowed</label><input id="c-min" type="number" step="any" value="0" required></div>
-          <div><label for="c-max">Highest allowed</label><input id="c-max" type="number" step="any" value="100" required></div>
-          <div><label for="c-unit">Unit (optional)</label><input id="c-unit" maxlength="40" placeholder="GB"></div>
+        <label for="c-kind">Type</label>
+        <select id="c-kind">
+          <option value="number">Number — students type a number; shows the distribution</option>
+          <option value="rating">Rating — students rate three items 0–10, one at a time</option>
+          <option value="ranking">Ranking — students pick the better item in three pairs</option>
+        </select>
+        <label for="c-question" id="c-question-label">Question</label>
+        <textarea id="c-question" required maxlength="500"></textarea>
+
+        <div id="c-number-fields">
+          <div class="row">
+            <div><label for="c-min">Lowest allowed</label><input id="c-min" type="number" step="any" value="0"></div>
+            <div><label for="c-max">Highest allowed</label><input id="c-max" type="number" step="any" value="100"></div>
+            <div><label for="c-unit">Unit (optional)</label><input id="c-unit" maxlength="40" placeholder="GB"></div>
+          </div>
+          <label style="font-weight:400"><input id="c-integer" type="checkbox" checked>Whole numbers only</label>
         </div>
-        <label style="font-weight:400"><input id="c-integer" type="checkbox" checked>Whole numbers only</label>
+
+        <div id="c-choice-fields" hidden>
+          <label for="c-item-0">Item A</label><textarea id="c-item-0" maxlength="2000"></textarea>
+          <label for="c-item-1">Item B</label><textarea id="c-item-1" maxlength="2000"></textarea>
+          <label for="c-item-2">Item C</label><textarea id="c-item-2" maxlength="2000"></textarea>
+          <p class="note">Students see the items without the letters A, B, C, in a random order.</p>
+          <label style="font-weight:400"><input id="c-both" type="checkbox" checked><span id="c-both-label"></span></label>
+        </div>
+
         <div class="row" style="margin-top:12px">
           <button class="primary" type="submit" data-open="1">Create and open</button>
           <button type="submit" data-open="0">Create (closed)</button>
@@ -92,15 +131,15 @@
 
 <div id="present" hidden>
   <h1 id="p-question"></h1>
-  <div class="join">
+  <div class="join" id="p-join">
     <div id="p-qr"></div>
     <div class="url" id="p-url"></div>
     <div class="note">Class key</div>
     <div class="key" id="p-key"></div>
   </div>
-  <div>
+  <div id="p-main">
     <div class="answer-count" id="p-count"></div>
-    <div id="p-hist"></div>
+    <div id="p-chart"></div>
   </div>
   <div class="controls">
     <button class="primary" id="p-toggle" type="button"></button>
