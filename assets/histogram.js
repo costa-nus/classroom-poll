@@ -32,11 +32,14 @@ export function histogramSvg(bins, integerOnly, unit, marks = {}) {
   });
   if (unit) parts.push(`<text x="${L + pw / 2}" y="${H - 8}" text-anchor="middle">${escapeHtml(unit)}</text>`);
   // Each mark gets its own label row above the plot, so close values do not overlap.
+  // With one bar per integer, bar [k, k+1) stands for the value k, so k sits at its centre.
+  const markX = v => x(perValue ? v + 0.5 : v);
   [['answer', marks.answer, 18], ['mean', marks.mean, 40]].forEach(([cls, v, ty]) => {
-    if (v === undefined || v === null || Number.isNaN(v) || v < lo || v > hi) return;
-    const anchor = x(v) < L + 60 ? 'start' : x(v) > W - R - 60 ? 'end' : 'middle';
-    parts.push(`<line class="${cls}" x1="${x(v)}" y1="${ty + 5}" x2="${x(v)}" y2="${T + ph}"/>`);
-    parts.push(`<text x="${x(v)}" y="${ty}" text-anchor="${anchor}">${cls} ${fmt(v)}</text>`);
+    if (v === undefined || v === null || Number.isNaN(v) || markX(v) < L || markX(v) > W - R) return;
+    const mx = markX(v);
+    const anchor = mx < L + 60 ? 'start' : mx > W - R - 60 ? 'end' : 'middle';
+    parts.push(`<line class="${cls}" x1="${mx}" y1="${ty + 5}" x2="${mx}" y2="${T + ph}"/>`);
+    parts.push(`<text x="${mx}" y="${ty}" text-anchor="${anchor}">${cls} ${fmt(v)}</text>`);
   });
   parts.push(...counts, '</svg>');
   return parts.join('');

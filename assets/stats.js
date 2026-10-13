@@ -29,16 +29,21 @@ export function summarize(values) {
  * @returns {{lo:number, hi:number, count:number}[]}  bars from left to right;
  *          a value v falls in the bar with lo <= v < hi (the last bar includes hi)
  *
- * TODO(JH): choose the binning rule. The current rule is a placeholder:
- * 10 equal bars across the poll's whole [min, max] range.
- * Options to weigh:
- *  - one bar per integer when integerOnly and the range is small (e.g. a 1–10 scale);
- *  - bin over the data's own range instead of [min, max], so a 0–1000 poll whose
- *    answers all sit in 40–60 does not collapse into one bar;
- *  - a data-driven count: Sturges (ceil(log2 n) + 1) or Freedman–Diaconis
- *    (width = 2 * IQR / n^(1/3)).
+ * Rule: whole-number polls with at most MAX_INTEGER_BARS possible answers get one
+ * bar per integer (e.g. a 1–10 scale). Otherwise 10 equal bars span [min, max].
  */
+const MAX_INTEGER_BARS = 30;
+
 export function binValues(values, min, max, integerOnly) {
+  const first = Math.ceil(min), last = Math.floor(max);
+  if (integerOnly && last - first + 1 <= MAX_INTEGER_BARS) {
+    const bins = Array.from({ length: last - first + 1 }, (_, i) => ({
+      lo: first + i, hi: first + i + 1, count: 0,
+    }));
+    for (const v of values) bins[v - first].count += 1;
+    return bins;
+  }
+
   const count = 10;
   const width = (max - min) / count;
   const bins = Array.from({ length: count }, (_, i) => ({
