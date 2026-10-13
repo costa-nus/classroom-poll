@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Class Poll Instructor</title>
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+</head>
+<body>
+<main class="wide">
+  <small class="kicker">Class poll · instructor</small>
+
+  <form id="login" hidden>
+    <h1>Instructor key</h1>
+    <label for="admin-key">Instructor key</label>
+    <input id="admin-key" type="password" autocomplete="current-password" required>
+    <p><button class="primary" type="submit">Sign in</button></p>
+    <p id="login-status" class="status error" role="status"></p>
+  </form>
+
+  <div id="app" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h1 style="flex:1 1 auto">Polls</h1>
+      <button class="small" id="sign-out" type="button">Forget key on this computer</button>
+    </div>
+
+    <section id="results" hidden>
+      <h2 id="r-question"></h2>
+      <p class="note" id="r-meta"></p>
+      <div class="row">
+        <button class="primary" id="r-toggle" type="button"></button>
+        <button id="r-present" type="button">Present full screen</button>
+        <button id="r-close-view" type="button">Back to list</button>
+      </div>
+      <div class="stats" id="r-stats"></div>
+      <div id="r-hist"></div>
+      <div class="row">
+        <div><label for="r-answer">Mark the correct answer (optional)</label><input id="r-answer" type="number" step="any"></div>
+        <div><label for="r-mean" style="font-weight:400"><input id="r-mean" type="checkbox" checked>Show mean line</label></div>
+      </div>
+    </section>
+
+    <section id="list-section">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Question</th><th>Range</th><th>Answers</th><th>Status</th><th></th></tr></thead>
+        <tbody id="list"></tbody>
+      </table></div>
+      <p id="list-empty" class="note" hidden>No polls yet. Create one below.</p>
+
+      <h2>New poll</h2>
+      <form id="create" class="panel">
+        <label for="c-question">Question</label>
+        <textarea id="c-question" required maxlength="500" placeholder="How much GPU memory does a 7B model need for full training?"></textarea>
+        <div class="row">
+          <div><label for="c-min">Lowest allowed</label><input id="c-min" type="number" step="any" value="0" required></div>
+          <div><label for="c-max">Highest allowed</label><input id="c-max" type="number" step="any" value="100" required></div>
+          <div><label for="c-unit">Unit (optional)</label><input id="c-unit" maxlength="40" placeholder="GB"></div>
+        </div>
+        <label style="font-weight:400"><input id="c-integer" type="checkbox" checked>Whole numbers only</label>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" type="submit" data-open="1">Create and open</button>
+          <button type="submit" data-open="0">Create (closed)</button>
+        </div>
+        <p id="create-status" class="status" role="status"></p>
+      </form>
+
+      <h2>Student link</h2>
+      <div class="panel">
+        <p class="note" style="margin-top:0">Only a hash of the student key is stored online, so this page cannot show it. Type it here once; it is saved on this computer and goes into the QR code.</p>
+        <div class="row">
+          <div><label for="student-key">Student key</label><input id="student-key" autocomplete="off" spellcheck="false"></div>
+          <button id="student-key-save" type="button">Save</button>
+        </div>
+        <p id="student-link" class="note"></p>
+      </div>
+
+      <h2>Change a key</h2>
+      <form id="rotate" class="panel">
+        <div class="row">
+          <div><label for="k-role">Key</label><select id="k-role"><option value="student">Student key (at least 4 characters)</option><option value="instructor">Instructor key (at least 12 characters)</option></select></div>
+          <div><label for="k-new">New key</label><input id="k-new" autocomplete="new-password" required></div>
+          <button type="submit">Change</button>
+        </div>
+        <p id="rotate-status" class="status" role="status"></p>
+      </form>
+    </section>
+  </div>
+</main>
+
+<div id="present" hidden>
+  <h1 id="p-question"></h1>
+  <div class="join">
+    <div id="p-qr"></div>
+    <div class="url" id="p-url"></div>
+    <div class="note">Class key</div>
+    <div class="key" id="p-key"></div>
+  </div>
+  <div>
+    <div class="answer-count" id="p-count"></div>
+    <div id="p-hist"></div>
+  </div>
+  <div class="controls">
+    <button class="primary" id="p-toggle" type="button"></button>
+    <button id="p-show" type="button"></button>
+    <button id="p-exit" type="button">Exit (Esc)</button>
+  </div>
+</div>
+<script type="module" src="assets/admin.js"></script>
+</body>
+</html>

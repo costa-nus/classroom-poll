@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Class Poll</title>
+<meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <small class="kicker">Class poll</small>
+
+  <form id="key-form" hidden>
+    <h1>Enter the class key</h1>
+    <label for="key-input">Class key</label>
+    <input id="key-input" class="big-input" autocomplete="off" autocapitalize="characters" spellcheck="false" required maxlength="40">
+    <p><button class="primary" type="submit">Join</button></p>
+    <p id="key-status" class="status error" role="status"></p>
+    <p class="note">Your instructor shows the key in class. You can also scan the QR code on the screen.</p>
+  </form>
+
+  <section id="waiting" hidden>
+    <h1>No poll is open</h1>
+    <p class="note">This page updates by itself when your instructor opens a poll.</p>
+  </section>
+
+  <form id="poll-form" hidden>
+    <h1 id="question"></h1>
+    <label for="answer" id="answer-label">Your answer</label>
+    <input id="answer" class="big-input" type="number" inputmode="decimal" required>
+    <p class="note" id="range"></p>
+    <p><button class="primary" id="submit" type="submit">Submit</button></p>
+    <p id="status" class="status" role="status"></p>
+  </form>
+
+  <footer>
+    Answers are anonymous: only the number is stored. You can change your answer while the poll is open.
+    <br><a href="#" id="change-key">Change key</a>
+  </footer>
+</main>
+<script type="module" src="assets/student.js"></script>
+</body>
+</html>
