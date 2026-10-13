@@ -1,4 +1,4 @@
-import { rpc, store, fmt, KeyError } from './api.js';
+import { rpc, store, fmt, KeyError, MOCK } from './api.js';
 import { PAIRS } from './stats.js';
 
 const $ = s => document.querySelector(s);
@@ -12,8 +12,9 @@ if (!voter) { voter = crypto.randomUUID(); store.set('cp.voter', voter); }
 
 // A key in the link (#k=KEY, from the QR code) is saved, then removed from the address bar.
 const fromLink = new URLSearchParams(location.hash.slice(1)).get('k');
-if (fromLink) { store.set('cp.key', fromLink.trim().toUpperCase()); history.replaceState(null, '', location.pathname); }
+if (fromLink) { store.set('cp.key', fromLink.trim().toUpperCase()); history.replaceState(null, '', location.pathname + location.search); }
 
+if (MOCK) { $('#mock-banner').hidden = false; store.set('cp.key', 'MOCK'); }
 let key = store.get('cp.key');
 let poll = null, busy = false, editing = false;
 

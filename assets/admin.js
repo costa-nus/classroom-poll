@@ -1,4 +1,4 @@
-import { rpc, store, fmt, KeyError } from './api.js';
+import { rpc, store, fmt, KeyError, MOCK } from './api.js';
 import { summarize, binValues, summarizeOrders, orderLabel, LETTERS, ORDERS, CYCLE } from './stats.js';
 import { histogramSvg, orderChartSvg, escapeHtml } from './histogram.js';
 
@@ -9,9 +9,9 @@ let selected = null;        // id of the poll shown in the results view
 let latest = null;          // last poll_results payload for it
 let comparing = null;       // { rating, ranking } poll results shown in the comparison
 let presentMode = null;     // 'poll' | 'compare' while full screen
-let showDistribution = false; // present mode starts with the count only
+let presentView = 'count';  // full-screen view: count | averages | agreement | revealed | top2 | all
 
-const studentUrl = new URL('./', location.href).href;
+const studentUrl = new URL('./', location.href).href + (MOCK ? '?mock=1' : '');
 const KIND_NAMES = { number: 'Number', rating: 'Rating', ranking: 'Ranking' };
 const pct = x => (x === null || x === undefined ? '–' : `${Math.round(x * 100)}%`);
 const short = (s, n = 140) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
@@ -156,9 +156,8 @@ function render() {
   $('#r-question').textContent = p.question;
   $('#r-toggle').textContent = p.is_open ? 'Close poll' : 'Open poll';
   $('#p-toggle').textContent = p.is_open ? 'Close poll' : 'Open poll';
-  $('#p-show').textContent = showDistribution ? 'Hide results' : 'Show results';
   $('#p-question').textContent = p.question;
-  let chart, presentChart, n;
+  let chart, presentHtml = '', n;
 
   if (p.kind === 'number') {
     const s = summarize(p.values); n = s.n;
@@ -169,13 +168,14 @@ function render() {
     $('#r-stats').innerHTML = cells.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
     $('#r-legend').innerHTML = '';
     $('#r-number-controls').hidden = false;
+    $('#r-hidden-controls').hidden = true;
     const bins = binValues(p.values.map(Number), Number(p.min_value), Number(p.max_value), p.integer_only);
     const answerText = $('#r-answer').value;
     chart = histogramSvg(bins, p.integer_only, p.unit, {
       mean: $('#r-mean').checked && s.n ? s.mean : undefined,
       answer: answerText === '' ? undefined : Number(answerText),
     });
-    presentChart = chart;
+    if (presentView === 'all') presentHtml = chart;
   } else {
     const s = summarizeOrders(p.kind, p.answers); n = s.n;
     $('#r-meta').textContent = `${KIND_NAMES[p.kind]} · ${p.is_open ? 'open' : 'closed'} · ${p.kind === 'rating'
@@ -188,15 +188,82 @@ function render() {
     $('#r-number-controls').hidden = true;
     const cls = p.kind === 'rating' ? 'rating-bar' : 'ranking-bar';
     chart = orderChartSvg(s.keys, [{ name: KIND_NAMES[p.kind], cls, summary: s }], orderLabel);
-    presentChart = `<p class="verdict">Most popular: ${escapeHtml(topText(s))} · ${pct(s.topShare)} agree</p>
-      <ul class="legend">${legendHtml(p, null)}</ul>${chart}`;
+    showHiddenControls(p);
+    presentHtml = choicePresentHtml(p, s, chart);
   }
   $('#r-chart').innerHTML = chart;
   if (presentMode === 'poll') {
     $('#p-count').textContent = `${n} ${n === 1 ? 'answer' : 'answers'}`;
-    $('#p-chart').innerHTML = showDistribution ? presentChart : '';
+    $('#p-chart').innerHTML = presentHtml;
+    updatePresentButtons(p.kind);
   }
 }
+
+// What the full-screen view shows for a rating or ranking poll.
+function choicePresentHtml(p, s, chart) {
+  const legend = `<ul class="legend">${legendHtml(p, null)}</ul>`;
+  const agreement = `<div class="big">${pct(s.topShare)}</div>
+    <p>of students gave the most popular order${s.top.length > 1 ? 's (tied)' : ''}</p>`;
+  switch (presentView) {
+    case 'averages': {
+      if (p.kind !== 'rating') return '';
+      const hidden = p.hidden_items || [];
+      const cards = [0, 1, 2].filter(i => !hidden.includes(i)).map(i => `
+        <div class="avg-card"><b>${s.n ? s.perItem[i].toFixed(1) : '–'}</b>
+          <span class="letter">${LETTERS[i]}</span> <span class="note">average of ${s.n} ratings</span>
+          <p>${escapeHtml(short(p.items[i], 200))}</p></div>`).join('');
+      return `<div class="avg-cards">${cards}</div>`;
+    }
+    case 'agreement':
+    case 'revealed': {
+      const blurred = presentView === 'agreement';
+      return `<div class="agree">${agreement}
+        <button type="button" class="glass ${blurred ? 'blurred' : ''}" aria-label="${blurred ? 'Hidden order. Click to reveal.' : 'Most popular order'}">
+          <span class="glass-text" ${blurred ? 'aria-hidden="true"' : ''}>${escapeHtml(topText(s))}</span></button></div>${legend}`;
+    }
+    case 'top2': {
+      const two = ORDERS.filter(k => s.counts[k] > 0).sort((a, b) => s.counts[b] - s.counts[a]).slice(0, 2);
+      const rows = two.map((k, i) => `<li>${i + 1}. ${escapeHtml(orderLabel(k))}<span>${pct(s.counts[k] / s.n)}</span></li>`).join('');
+      const cycles = p.kind === 'ranking' && s.cycles ? `<p class="note">No order (cycle): ${pct(s.cycles / s.n)}</p>` : '';
+      return `<div class="agree">${agreement}<ol class="top-orders">${rows || '<li>–</li>'}</ol>${cycles}</div>${legend}`;
+    }
+    case 'all':
+      return `<p class="verdict">Most popular: ${escapeHtml(topText(s))} · ${pct(s.topShare)} agree</p>${legend}${chart}`;
+    default:
+      return '';
+  }
+}
+
+function updatePresentButtons(kind) {
+  const show = { 'p-avg': kind === 'rating', 'p-agree': kind !== 'number',
+    'p-reveal': kind === 'rating' && presentView === 'agreement', 'p-top2': kind === 'ranking',
+    'p-show': presentView !== 'all', 'p-hide': presentView !== 'count' };
+  for (const [id, visible] of Object.entries(show)) $(`#${id}`).hidden = !visible;
+}
+
+function setView(view) { presentView = view; if (latest) render(); }
+$('#p-avg').onclick = () => setView('averages');
+$('#p-agree').onclick = () => setView('agreement');
+$('#p-reveal').onclick = () => setView('revealed');
+$('#p-top2').onclick = () => setView('top2');
+$('#p-show').onclick = () => setView('all');
+$('#p-hide').onclick = () => setView('count');
+// Clicking the blurred cover reveals: the order (rating) or the top two orders (ranking).
+$('#p-chart').addEventListener('click', e => {
+  if (presentMode === 'poll' && e.target.closest('.glass.blurred')) setView(latest.kind === 'rating' ? 'revealed' : 'top2');
+});
+
+// Rating polls: which items the averages view shows. Stored on the poll.
+function showHiddenControls(p) {
+  const box = $('#r-hidden-controls');
+  box.hidden = p.kind !== 'rating';
+  for (const cb of box.querySelectorAll('input')) cb.checked = !(p.hidden_items || []).includes(Number(cb.dataset.item));
+}
+$('#r-hidden-controls').addEventListener('change', async () => {
+  const hidden = [...$('#r-hidden-controls').querySelectorAll('input')].filter(cb => !cb.checked).map(cb => Number(cb.dataset.item));
+  await call('poll_set_hidden', { p_poll: selected, p_hidden: hidden });
+  await refreshResults();
+});
 
 async function toggleOpen() {
   await call('poll_set_open', { p_poll: selected, p_open: !latest.is_open });
@@ -304,7 +371,7 @@ function enterPresent(mode) {
   $('#present').classList.toggle('compare', compare);
   $('#p-join').hidden = compare;
   $('#p-toggle').hidden = compare;
-  $('#p-show').hidden = compare;
+  for (const id of ['p-avg', 'p-agree', 'p-reveal', 'p-top2', 'p-show', 'p-hide']) $(`#${id}`).hidden = compare;
   $('#p-count').hidden = compare;
   if (compare) {
     $('#p-question').textContent = 'Rating vs ranking';
@@ -314,7 +381,7 @@ function enterPresent(mode) {
     $('#p-qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
     $('#p-url').textContent = studentUrl.replace(/^https?:\/\//, '');
     $('#p-key').textContent = store.get('cp.studentKey') || '';
-    showDistribution = false; render();
+    presentView = 'count'; render();
   }
   $('#present').hidden = false;
   document.documentElement.requestFullscreen?.().catch(() => {});
@@ -327,7 +394,6 @@ function exitPresent() {
 $('#r-present').onclick = () => enterPresent('poll');
 $('#cmp-present').onclick = () => enterPresent('compare');
 $('#p-exit').onclick = exitPresent;
-$('#p-show').onclick = () => { showDistribution = !showDistribution; render(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#present').hidden) exitPresent(); });
 
 // ---- student key (local only) and key rotation --------------------------
@@ -368,6 +434,41 @@ $('#login').addEventListener('submit', async e => {
   catch (err) { if (!(err instanceof KeyError)) setStatus($('#login-status'), err.message, 'error'); }
 });
 $('#sign-out').onclick = () => signOut();
+
+// ---- mock run -------------------------------------------------------------
+// Copies the real polls (questions, items, settings; no answers) into this
+// browser and reloads the page in mock mode, where every call stays local.
+$('#mock-start').onclick = async () => {
+  const { resetMock } = await import('./mock.js');
+  resetMock(polls.map(({ responses, ...p }) => p));
+  location.href = 'admin.html?mock=1';
+};
+if (MOCK) {
+  $('#mock-tools').hidden = false;
+  $('#mock-start').hidden = true;
+  $('#sign-out').hidden = true;
+  document.title = 'Mock run · Class Poll';
+  if (!adminKey) { adminKey = 'MOCK'; store.set('cp.admin', 'MOCK'); }
+  store.set('cp.studentKey', 'MOCK');
+  const mockStatus = t => setStatus($('#m-status'), t, 'ok');
+  const sim = async n => {
+    const { simulateAnswers } = await import('./mock.js');
+    mockStatus(simulateAnswers(n));
+    await Promise.all([loadList(), refreshResults(), refreshCompare()]);
+  };
+  $('#m-sim10').onclick = () => sim(10);
+  $('#m-sim1').onclick = () => sim(1);
+  $('#m-student').onclick = () => window.open('./?mock=1', '_blank');
+  $('#m-reset').onclick = async () => {
+    if (!confirm('Start over? All mock answers are cleared and all polls closed.')) return;
+    const { resetMock, mockRpc } = await import('./mock.js');
+    const current = await mockRpc('poll_list', {});
+    resetMock(current.map(({ responses, ...p }) => p));
+    closeView(); closeCompare(); await loadList();
+    mockStatus('All mock answers cleared and all polls closed.');
+  };
+  $('#m-exit').onclick = () => { location.href = 'admin.html'; };
+}
 
 async function start() {
   await loadList();

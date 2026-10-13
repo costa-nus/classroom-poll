@@ -2,8 +2,15 @@ import { SUPABASE_URL, PUBLISHABLE_KEY } from './config.js';
 
 export class KeyError extends Error {}
 
+// Mock run (?mock=1): answers come from this browser, nothing goes online.
+export const MOCK = new URLSearchParams(location.search).has('mock');
+
 // Calls one RPC function. Throws KeyError for a wrong key, Error otherwise.
 export async function rpc(fn, args) {
+  if (MOCK) {
+    const { mockRpc } = await import('./mock.js');
+    return mockRpc(fn, args);
+  }
   let response;
   try {
     response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
@@ -27,11 +34,13 @@ export async function rpc(fn, args) {
 }
 
 // localStorage can throw (private windows, blocked storage); fall back to memory.
+// A mock run keeps its own copies, so it never touches the real key or answers.
 const memory = {};
+const ns = k => (MOCK ? `mock.${k}` : k);
 export const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return memory[k] ?? null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { memory[k] = v; } },
-  del(k) { try { localStorage.removeItem(k); } catch { delete memory[k]; } },
+  get(k) { try { return localStorage.getItem(ns(k)); } catch { return memory[ns(k)] ?? null; } },
+  set(k, v) { try { localStorage.setItem(ns(k), v); } catch { memory[ns(k)] = v; } },
+  del(k) { try { localStorage.removeItem(ns(k)); } catch { delete memory[ns(k)]; } },
 };
 
 export function fmt(x) {

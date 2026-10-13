@@ -97,3 +97,17 @@ svg.hist .ranking-bar { fill: var(--accent); }
   .scale { grid-template-columns: repeat(6, 1fr); }
   .pair { grid-template-columns: 1fr; }
 }
+/* Present-mode views for rating and ranking polls */
+.avg-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 12px; }
+.avg-card { background: var(--muted-bg); border-radius: 6px; padding: 18px; }
+.avg-card b { display: block; font-size: clamp(44px, 6vw, 80px); color: var(--head); line-height: 1.1; }
+.avg-card .letter { font-weight: 700; color: var(--accent); }
+.avg-card p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.agree .big { font-size: clamp(56px, 9vw, 120px); font-weight: 700; color: var(--head); line-height: 1; }
+.agree p { font-size: 22px; margin: 8px 0 18px; }
+.glass { display: block; width: 100%; position: relative; overflow: hidden; padding: 22px; border-radius: 8px; border: 2px solid var(--line); background: var(--panel); font-size: clamp(28px, 4vw, 52px); font-weight: 700; color: var(--head); text-align: center; cursor: pointer; }
+.glass.blurred .glass-text { filter: blur(18px); user-select: none; }
+.glass.blurred::after { content: "Click to reveal"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; color: var(--muted); background: color-mix(in srgb, var(--panel) 35%, transparent); backdrop-filter: blur(6px); }
+.top-orders { list-style: none; padding: 0; margin: 0; }
+.top-orders li { font-size: clamp(26px, 3.6vw, 46px); font-weight: 700; color: var(--head); margin: 6px 0; }
+.top-orders li span { color: var(--accent); margin-left: 16px; }

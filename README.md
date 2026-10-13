@@ -44,6 +44,35 @@ type the key. Each browser has one answer per poll; submitting again replaces it
    polls (the ranking poll with the same items is picked for you) and click
    **Compare**, then **Present full screen**.
 
+### Full-screen views for rating and ranking polls
+
+**Present full screen** starts with the question, QR code and answer count.
+The buttons under it choose what the class sees:
+
+| Button | Shows | Poll type |
+|---|---|---|
+| **Show averages** | the mean rating of each item, except items unticked under *Averages view shows* in the results view (saved with the poll) | rating |
+| **Show agreement** | the share who gave the most popular order; the order itself is under blurred glass | rating, ranking |
+| **Reveal order** (or click the glass) | the most popular order | rating |
+| **Show top two orders** (or click the glass) | the two most popular orders with their shares | ranking |
+| **Show all results** | the share of every order | all |
+| **Hide results** | back to the answer count | all |
+
+## Mock run
+
+**Mock run** (top of the instructor page) reloads the page in practice mode
+(`admin.html?mock=1`). It copies your polls — questions, items, settings, no
+answers — into this browser. Every button works as in class, but nothing is
+sent online and the real polls do not change. Extra buttons:
+
+- **Add 10 simulated answers to the open poll** / **Add 1** — simulated
+  students with some disagreement, so the views have data.
+- **Open student view (new tab)** — answer the open mock poll yourself
+  (`?mock=1`, same browser only; a phone scanning the mock QR code sees an
+  empty mock).
+- **Start over** — clear mock answers and close all mock polls.
+- **Exit mock run** — back to the real page.
+
 Each student's answers give one order of A, B, C, best first. A rating gives it
 by sorting the three ratings. A ranking gives it by counting pair wins (2, 1, 0);
 when each item wins once (A > B, B > C, C > A) there is no order, and the answer
@@ -70,8 +99,8 @@ protect the data; the database does.
 - The tables are in a `private` schema that the Supabase Data API does not
   expose. Row level security is on with no policies, and all table grants to
   `anon` and `authenticated` are revoked.
-- A browser can only call ten `SECURITY DEFINER` functions
-  (`supabase/001_init.sql`, `supabase/002_rating_ranking.sql`). Each one checks the key it is given against a
+- A browser can only call eleven `SECURITY DEFINER` functions
+  (`supabase/001_init.sql` to `supabase/003_hidden_items.sql`). Each one checks the key it is given against a
   bcrypt hash before it does anything. The student key can read the open
   poll and submit; only the instructor key can create, open, close, delete,
   read results or change keys.
@@ -108,6 +137,7 @@ assets/stats.js     summary statistics, histogram bins, orders from ratings and 
 assets/histogram.js SVG histogram and order-share chart
 assets/student.js   student page logic
 assets/admin.js     instructor page logic
+assets/mock.js      mock run: the RPC functions in the browser, simulated students
 assets/style.css    styles, light and dark
 supabase/*.sql      database schema and functions, in order (no keys)
 ```

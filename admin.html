@@ -24,8 +24,22 @@
   <div id="app" hidden>
     <div class="row" style="justify-content:space-between">
       <h1 style="flex:1 1 auto">Polls</h1>
+      <button class="small" id="mock-start" type="button">Mock run</button>
       <button class="small" id="sign-out" type="button">Forget key on this computer</button>
     </div>
+
+    <section id="mock-tools" class="panel" hidden>
+      <b>Mock run.</b> Copies of your polls, with no answers. Nothing is sent online and the real polls do not change.
+      Use the buttons exactly as in class; add simulated students to see results.
+      <div class="row" style="margin-top:10px">
+        <button id="m-sim10" type="button">Add 10 simulated answers to the open poll</button>
+        <button id="m-sim1" type="button">Add 1</button>
+        <button id="m-student" type="button">Open student view (new tab)</button>
+        <button id="m-reset" type="button">Start over</button>
+        <button class="primary" id="m-exit" type="button">Exit mock run</button>
+      </div>
+      <p id="m-status" class="status" role="status"></p>
+    </section>
 
     <section id="results" hidden>
       <h2 id="r-question"></h2>
@@ -38,6 +52,13 @@
       <div class="stats" id="r-stats"></div>
       <ul class="legend" id="r-legend"></ul>
       <div id="r-chart"></div>
+      <div class="panel" id="r-hidden-controls" hidden>
+        <b>Averages view shows:</b>
+        <label style="display:inline;font-weight:400;margin-left:12px"><input type="checkbox" data-item="0">A</label>
+        <label style="display:inline;font-weight:400;margin-left:12px"><input type="checkbox" data-item="1">B</label>
+        <label style="display:inline;font-weight:400;margin-left:12px"><input type="checkbox" data-item="2">C</label>
+        <span class="note" style="margin-left:12px">Saved with the poll, so it holds on any computer.</span>
+      </div>
       <div class="row" id="r-number-controls">
         <div><label for="r-answer">Mark the correct answer (optional)</label><input id="r-answer" type="number" step="any"></div>
         <div><label for="r-mean" style="font-weight:400"><input id="r-mean" type="checkbox" checked>Show mean line</label></div>
@@ -143,7 +164,12 @@
   </div>
   <div class="controls">
     <button class="primary" id="p-toggle" type="button"></button>
-    <button id="p-show" type="button"></button>
+    <button id="p-avg" type="button">Show averages</button>
+    <button id="p-agree" type="button">Show agreement</button>
+    <button id="p-reveal" type="button">Reveal order</button>
+    <button id="p-top2" type="button">Show top two orders</button>
+    <button id="p-show" type="button">Show all results</button>
+    <button id="p-hide" type="button">Hide results</button>
     <button id="p-exit" type="button">Exit (Esc)</button>
   </div>
 </div>
