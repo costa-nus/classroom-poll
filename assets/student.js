@@ -29,7 +29,9 @@ async function refresh() {
   try {
     const current = await rpc('poll_current', { p_key: key });
     if (!current) { poll = null; show(waiting); return; }
-    if (poll?.id === current.id) return;
+    // Same poll, same round: keep the current view. A reset bumps the round.
+    if (poll?.id === current.id && (poll.round ?? 0) === (current.round ?? 0)) return;
+    if (poll?.id === current.id) store.del(`cp.plan.${current.id}`);  // new round, new random order
     poll = current;
     const mine = await rpc('poll_my_answer', { p_key: key, p_poll: poll.id, p_voter: voter });
     if (poll.kind === 'number') startNumber(mine?.value);
@@ -224,6 +226,6 @@ setInterval(() => {
 async function checkClosed() {
   try {
     const current = await rpc('poll_current', { p_key: key });
-    if (!current || current.id !== poll?.id) { editing = false; poll = null; refresh(); }
+    if (!current || current.id !== poll?.id || (current.round ?? 0) !== (poll.round ?? 0)) { editing = false; poll = null; refresh(); }
   } catch { /* try again on the next tick */ }
 }

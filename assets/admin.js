@@ -9,6 +9,9 @@ let selected = null;        // id of the poll shown in the results view
 let latest = null;          // last poll_results payload for it
 let comparing = null;       // { rating, ranking } poll results shown in the comparison
 let presentMode = null;     // 'poll' | 'compare' while full screen
+// Results view of a rating/ranking poll: what is uncovered. Both start hidden, so the
+// page can be projected without giving the answer away.
+let reveal = { averages: false, order: false };
 let presentView = 'count';  // full-screen view: count | averages | agreement | revealed | top2 | all
 
 const studentUrl = new URL('./', location.href).href + (MOCK ? '?mock=1' : '');
@@ -48,6 +51,7 @@ async function loadList() {
       <td class="actions">
         <button class="small" data-act="view" data-id="${p.id}">Results</button>
         <button class="small" data-act="${p.is_open ? 'close' : 'open'}" data-id="${p.id}">${p.is_open ? 'Close' : 'Open'}</button>
+        <button class="small" data-act="reset" data-id="${p.id}">Reset</button>
         <button class="small danger" data-act="delete" data-id="${p.id}">Delete</button>
       </td>
     </tr>`).join('');
@@ -60,6 +64,9 @@ $('#list').addEventListener('click', async e => {
   if (b.dataset.act === 'view') return view(id);
   if (b.dataset.act === 'open' || b.dataset.act === 'close') {
     await call('poll_set_open', { p_poll: id, p_open: b.dataset.act === 'open' });
+  }
+  if (b.dataset.act === 'reset') {
+    if (!(await resetPoll(id))) return;
   }
   if (b.dataset.act === 'delete') {
     if (!confirm('Delete this poll and all its answers? This cannot be undone.')) return;
@@ -122,6 +129,7 @@ $('#create').addEventListener('submit', async e => {
 // ---- results view -------------------------------------------------------
 async function view(id) {
   closeCompare();
+  if (selected !== id) reveal = { averages: false, order: false };
   selected = id; $('#results').hidden = false;
   await refreshResults();
   $('#results').scrollIntoView({ behavior: 'smooth' });
@@ -135,13 +143,14 @@ async function refreshResults() {
   render();
 }
 
-function legendHtml(p, summary) {
+// `show.means`: item indices whose mean rating is shown; `show.wins`: show pair wins.
+function legendHtml(p, summary, show = {}) {
   return p.items.map((text, i) => {
     let extra = '';
-    if (summary?.n) {
-      extra = p.kind === 'rating'
-        ? ` <span class="note">— mean rating ${summary.perItem[i].toFixed(1)}</span>`
-        : ` <span class="note">— won ${summary.perItem[i]} of ${2 * summary.n} pairs</span>`;
+    if (summary?.n && p.kind === 'rating' && show.means?.includes(i)) {
+      extra = ` <span class="note">— mean rating ${summary.perItem[i].toFixed(1)}</span>`;
+    } else if (summary?.n && p.kind === 'ranking' && show.wins) {
+      extra = ` <span class="note">— won ${summary.perItem[i]} of ${2 * summary.n} pairs</span>`;
     }
     return `<li><b>${LETTERS[i]}</b> ${escapeHtml(short(text))}${extra}</li>`;
   }).join('');
@@ -169,6 +178,8 @@ function render() {
     $('#r-legend').innerHTML = '';
     $('#r-number-controls').hidden = false;
     $('#r-hidden-controls').hidden = true;
+    $('#r-show-avg').hidden = true;
+    $('#r-show-order').hidden = true;
     const bins = binValues(p.values.map(Number), Number(p.min_value), Number(p.max_value), p.integer_only);
     const answerText = $('#r-answer').value;
     chart = histogramSvg(bins, p.integer_only, p.unit, {
@@ -181,15 +192,21 @@ function render() {
     $('#r-meta').textContent = `${KIND_NAMES[p.kind]} · ${p.is_open ? 'open' : 'closed'} · ${p.kind === 'rating'
       ? 'each student rates A, B, C from 0 to 10 (all different)'
       : 'each student picks the better item in A–B, A–C, B–C'}`;
-    const cells = [['Answers', s.n], ['Most popular order', topText(s)], ['Agree on it', pct(s.topShare)]];
+    const cells = [['Answers', s.n], ['Most popular order', reveal.order ? topText(s) : 'Hidden'], ['Agree on it', pct(s.topShare)]];
     if (p.kind === 'ranking') cells.push(['No order (cycle)', s.n ? `${s.cycles} (${pct(s.cycles / s.n)})` : '0']);
     $('#r-stats').innerHTML = cells.map(([k, v]) => `<div><b>${escapeHtml(String(v))}</b><span>${k}</span></div>`).join('');
-    $('#r-legend').innerHTML = legendHtml(p, s);
+    const shownMeans = [0, 1, 2].filter(i => !(p.hidden_items || []).includes(i));
+    $('#r-legend').innerHTML = legendHtml(p, s, { means: reveal.averages ? shownMeans : [], wins: reveal.order });
     $('#r-number-controls').hidden = true;
+    $('#r-show-avg').hidden = p.kind !== 'rating';
+    $('#r-show-avg').textContent = reveal.averages ? 'Hide averages' : 'Show averages';
+    $('#r-show-order').hidden = false;
+    $('#r-show-order').textContent = reveal.order ? 'Hide order and distribution' : 'Show order and distribution';
     const cls = p.kind === 'rating' ? 'rating-bar' : 'ranking-bar';
-    chart = orderChartSvg(s.keys, [{ name: KIND_NAMES[p.kind], cls, summary: s }], orderLabel);
+    const fullChart = orderChartSvg(s.keys, [{ name: KIND_NAMES[p.kind], cls, summary: s }], orderLabel);
+    chart = reveal.order ? fullChart : '';
     showHiddenControls(p);
-    presentHtml = choicePresentHtml(p, s, chart);
+    presentHtml = choicePresentHtml(p, s, fullChart);
   }
   $('#r-chart').innerHTML = chart;
   if (presentMode === 'poll') {
@@ -272,6 +289,19 @@ async function toggleOpen() {
 $('#r-toggle').onclick = toggleOpen;
 $('#p-toggle').onclick = toggleOpen;
 $('#r-close-view').onclick = closeView;
+
+// Deletes every answer to a poll; the poll, its items and its settings stay.
+async function resetPoll(id) {
+  const p = polls.find(q => q.id === id);
+  const n = id === selected && latest ? latest.values.length + latest.answers.length : (p ? p.responses : 0);
+  if (!confirm(`Delete ${n === 1 ? 'the 1 answer' : `all ${n} answers`} to "${p ? short(p.question, 60) : 'this poll'}"? The poll stays. This cannot be undone.`)) return false;
+  await call('poll_reset', { p_poll: id });
+  await Promise.all([loadList(), refreshResults(), refreshCompare()]);
+  return true;
+}
+$('#r-reset').onclick = () => selected && resetPoll(selected);
+$('#r-show-avg').onclick = () => { reveal.averages = !reveal.averages; if (latest) render(); };
+$('#r-show-order').onclick = () => { reveal.order = !reveal.order; if (latest) render(); };
 $('#r-answer').oninput = () => latest && render();
 $('#r-mean').onchange = () => latest && render();
 

@@ -20,7 +20,7 @@ export async function mockRpc(fn, a) {
       case 'poll_current': {
         const p = db.polls.find(q => q.is_open);
         return p ? { id: p.id, question: p.question, unit: p.unit, min_value: p.min_value, max_value: p.max_value,
-                     integer_only: p.integer_only, kind: p.kind, items: p.items } : null;
+                     integer_only: p.integer_only, kind: p.kind, items: p.items, round: p.round || 0 } : null;
       }
       case 'poll_my_answer': {
         const r = db.resp[a.p_poll]?.[a.p_voter];
@@ -74,6 +74,13 @@ export async function mockRpc(fn, a) {
         if (!p) return null;
         const rs = Object.values(db.resp[p.id] || {});
         return { ...p, values: rs.filter(r => r.value != null).map(r => r.value), answers: rs.filter(r => r.answer).map(r => r.answer) };
+      }
+      case 'poll_reset': {
+        const p = poll(a.p_poll);
+        const deleted = Object.keys(db.resp[p.id] || {}).length;
+        db.resp[p.id] = {};
+        p.round = (p.round || 0) + 1;
+        return { deleted };
       }
       case 'poll_delete':
         db.polls = db.polls.filter(p => p.id !== a.p_poll);

@@ -24,6 +24,10 @@ Supabase.
    class key and the number of answers. The distribution stays hidden until you
    click **Show distribution**, so early answers do not steer later ones.
 5. Click **Close poll** to stop answers. The results stay; you can reopen it.
+6. **Reset** (in the poll list) or **Reset answers** (in the results view)
+   deletes every answer to that poll after a confirmation; the poll, its items
+   and its settings stay. Use it after a trial run. Student pages that already
+   answered start the poll again.
 
 Students scan the QR code (the key is in the link) or open the student page and
 type the key. Each browser has one answer per poll; submitting again replaces it.
@@ -99,8 +103,8 @@ protect the data; the database does.
 - The tables are in a `private` schema that the Supabase Data API does not
   expose. Row level security is on with no policies, and all table grants to
   `anon` and `authenticated` are revoked.
-- A browser can only call eleven `SECURITY DEFINER` functions
-  (`supabase/001_init.sql` to `supabase/003_hidden_items.sql`). Each one checks the key it is given against a
+- A browser can only call twelve `SECURITY DEFINER` functions
+  (`supabase/001_init.sql` to `supabase/004_poll_reset.sql`). Each one checks the key it is given against a
   bcrypt hash before it does anything. The student key can read the open
   poll and submit; only the instructor key can create, open, close, delete,
   read results or change keys.
